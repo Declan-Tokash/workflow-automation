@@ -4,8 +4,8 @@ import (
     "log"
     "net/http"
 
-    "github.com/declantokash/workflow-automation-dt/internal/auth"
-    "github.com/declantokash/workflow-automation-dt/internal/config"
+    "github.com/Declan-Tokash/workflow-automation/internal/auth"
+    "github.com/Declan-Tokash/workflow-automation/internal/config"
 )
 
 func main() {

@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
+	"fmt"
 
 	"golang.org/x/oauth2"
 
-	"github.com/declantokash/workflow-automation-dt/internal/config"
+	"github.com/Declan-Tokash/workflow-automation/internal/config"
+	"github.com/Declan-Tokash/workflow-automation/internal/github"
 )
 
 type Handler struct {
@@ -81,7 +83,39 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte("Successfully authenticated with GitHub!"))
+	githubClient := github.NewClient(
+		r.Context(),
+		token.AccessToken,
+	)
 
-	_ = token
+	user, err := githubClient.GetUser(r.Context())
+	if err != nil {
+		http.Error(w, "failed to get GitHub user", http.StatusInternalServerError)
+		return
+	}
+
+	repos, err := githubClient.GetRepositories(r.Context())
+	if err != nil {
+		http.Error(w, "failed to get repositories", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(
+		w,
+		"Authenticated as: %s\n\nRepositories:\n",
+		user.Login,
+	)
+	
+	for _, repo := range repos {
+		fmt.Fprintf(
+			w,
+			"- %s (%s)\n",
+			repo.FullName,
+			repo.CloneURL,
+		)
+	}
+
+	// w.Write([]byte("Successfully authenticated with GitHub!"))
+
+	// _ = token
 }

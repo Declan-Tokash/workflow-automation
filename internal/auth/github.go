@@ -5,7 +5,7 @@ import (
 
 	// "github.com/golang-jwt/jwt/v5"
 
-	"github.com/declantokash/workflow-automation-dt/internal/config"
+	"github.com/Declan-Tokash/workflow-automation/internal/config"
 )
 
 type GitHubApp struct {
