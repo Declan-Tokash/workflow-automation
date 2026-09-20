@@ -10,17 +10,24 @@ import (
 
 	"github.com/Declan-Tokash/workflow-automation/internal/config"
 	"github.com/Declan-Tokash/workflow-automation/internal/github"
+	"github.com/Declan-Tokash/workflow-automation/internal/session"
 )
 
 type Handler struct {
 	GitHubApp *GitHubApp
 	Config    config.Config
+	Sessions  *session.Store
 }
 
-func NewHandler(githubApp *GitHubApp, cfg config.Config) *Handler {
+func NewHandler(
+	githubApp *GitHubApp,
+	cfg config.Config,
+	sessionStore *session.Store,
+) *Handler {
 	return &Handler{
 		GitHubApp: githubApp,
 		Config:    cfg,
+		Sessions:  sessionStore,
 	}
 }
 
@@ -94,28 +101,46 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repos, err := githubClient.GetRepositories(r.Context())
+	sessionID := h.Sessions.Create(session.Session{
+		UserID:      user.ID,
+		GitHubLogin: user.Login,
+		AccessToken: token.AccessToken,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	http.Redirect(
+		w,
+		r,
+		"/api/me",
+		http.StatusSeeOther,
+	)
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
 	if err != nil {
-		http.Error(w, "failed to get repositories", http.StatusInternalServerError)
+		http.Error(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	userSession, ok := h.Sessions.Get(cookie.Value)
+	if !ok {
+		http.Error(w, "invalid session", http.StatusUnauthorized)
 		return
 	}
 
 	fmt.Fprintf(
 		w,
-		"Authenticated as: %s\n\nRepositories:\n",
-		user.Login,
+		"Logged in as %s (GitHub ID: %d)",
+		userSession.GitHubLogin,
+		userSession.UserID,
 	)
-	
-	for _, repo := range repos {
-		fmt.Fprintf(
-			w,
-			"- %s (%s)\n",
-			repo.FullName,
-			repo.CloneURL,
-		)
-	}
-
-	// w.Write([]byte("Successfully authenticated with GitHub!"))
-
-	// _ = token
 }
