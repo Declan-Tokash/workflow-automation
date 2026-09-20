@@ -73,6 +73,8 @@ func (r *ContainerRunner) Exec(
 
 	args := []string{
 		"exec",
+		"-w",
+		"/workspace",
 		containerID,
 	}
 
@@ -118,4 +120,72 @@ func (r *ContainerRunner) Remove(
 	}
 
 	return nil
+}
+
+func (r *ContainerRunner) Clone(
+	ctx context.Context,
+	containerID string,
+	cloneURL string,
+	token string,
+) (string, error) {
+
+	askpass := fmt.Sprintf(`#!/bin/sh
+
+	case "$1" in
+		Username*)
+			echo "x-access-token"
+			;;
+		Password*)
+			echo '%s'
+			;;
+	esac
+	`, token)
+
+	_, err := r.Exec(
+		ctx,
+		containerID,
+		"sh",
+		"-c",
+		fmt.Sprintf(
+			"printf '%%s' '%s' > /tmp/git-askpass && chmod 700 /tmp/git-askpass",
+			askpass,
+		),
+	)
+
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed to create git auth helper: %w",
+			err,
+		)
+	}
+
+	output, err := r.Exec(
+		ctx,
+		containerID,
+		"sh",
+		"-c",
+		fmt.Sprintf(
+			"GIT_ASKPASS=/tmp/git-askpass "+
+				"GIT_TERMINAL_PROMPT=0 "+
+				"git clone '%s' /workspace/repo",
+			cloneURL,
+		),
+	)
+
+	if err != nil {
+		return output, fmt.Errorf(
+			"failed to clone repository: %w",
+			err,
+		)
+	}
+
+	_, _ = r.Exec(
+		ctx,
+		containerID,
+		"rm",
+		"-f",
+		"/tmp/git-askpass",
+	)
+
+	return output, nil
 }

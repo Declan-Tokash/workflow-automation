@@ -3,6 +3,7 @@ package repos
 import (
 	"encoding/json"
 	"net/http"
+	"fmt"
 
 	"github.com/Declan-Tokash/workflow-automation/internal/session"
 	"github.com/Declan-Tokash/workflow-automation/internal/github"
@@ -35,6 +36,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		userSession.AccessToken,
 	)
+
+	fmt.Printf("Fetching repositories for user: %s\n", userSession.AccessToken)
 
 	repos, err := githubClient.GetRepositories(r.Context())
 	if err != nil {

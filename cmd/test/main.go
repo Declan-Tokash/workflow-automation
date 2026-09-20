@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/Declan-Tokash/workflow-automation/internal/runner"
 )
@@ -15,7 +16,7 @@ func main() {
 
 	containerID, err := r.Create(
 		ctx,
-		"python:3.12",
+		"workflow-python:latest",
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -35,16 +36,59 @@ func main() {
 
 	fmt.Println("Container started")
 
-	output, err := r.Exec(
+	_, err = r.Clone(
 		ctx,
 		containerID,
-		"python",
-		"--version",
+		"https://github.com/Declan-Tokash/workflow-automation.git",
+		os.Getenv("ACCESS_TOKEN"),
 	)
-
+	
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Output:", output)
+	output, err := r.Exec(
+		ctx,
+		containerID,
+		"pwd",
+	)
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	fmt.Println(output)
+
+	output, err = r.Exec(
+		ctx,
+		containerID,
+		"sh",
+		"-c",
+		"cd repo && ls",
+	)
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	fmt.Println(output)
+
+	// output, err := r.Exec(
+	// 	ctx,
+	// 	containerID,
+	// 	"python",
+	// 	"--version",
+	// )
+	// output, err := r.Exec(
+	// 	ctx,
+	// 	containerID,
+	// 	"git",
+	// 	"--version",
+	// )
+
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// fmt.Println("Output:", output)
 }
