@@ -9,6 +9,8 @@ import (
 	"github.com/Declan-Tokash/workflow-automation/internal/session"
 	"github.com/Declan-Tokash/workflow-automation/internal/repos"
 	"github.com/Declan-Tokash/workflow-automation/internal/clone"
+	"github.com/Declan-Tokash/workflow-automation/internal/run"
+	"github.com/Declan-Tokash/workflow-automation/internal/runner"
 )
 
 func main() {
@@ -27,6 +29,13 @@ func main() {
 		sessionStore,
 	)
 
+	containerRunner := runner.NewContainerRunner()
+
+    runHandler := run.NewHandler(
+        sessionStore,
+        containerRunner,
+    )
+
 	repoHandler := repos.NewHandler(sessionStore)
 
 	cloneService := clone.NewService()
@@ -43,6 +52,7 @@ func main() {
 	mux.HandleFunc("/api/me", authHandler.Me)
 	mux.HandleFunc("/api/repos", repoHandler.List)
 	mux.HandleFunc("/api/repos/", cloneHandler.Clone)
+	mux.HandleFunc("/api/run/", runHandler.Run)
 
 	log.Println("Server running on http://localhost:8080")
 

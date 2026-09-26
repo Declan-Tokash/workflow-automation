@@ -68,7 +68,7 @@ func (r *ContainerRunner) Start(
 func (r *ContainerRunner) Exec(
 	ctx context.Context,
 	containerID string,
-	command ...string,
+	command string,
 ) (string, error) {
 
 	args := []string{
@@ -76,22 +76,19 @@ func (r *ContainerRunner) Exec(
 		"-w",
 		"/workspace",
 		containerID,
+		"/bin/sh",
+		"-c",
+		command,
 	}
 
-	args = append(args, command...)
-
-	cmd := exec.CommandContext(
-		ctx,
-		"docker",
-		args...,
-	)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 
 	output, err := cmd.CombinedOutput()
-
 	if err != nil {
-		return string(output), fmt.Errorf(
-			"container command failed: %w",
+		return "", fmt.Errorf(
+			"container command failed: %w\noutput: %s",
 			err,
+			string(output),
 		)
 	}
 
@@ -123,69 +120,66 @@ func (r *ContainerRunner) Remove(
 }
 
 func (r *ContainerRunner) Clone(
-	ctx context.Context,
-	containerID string,
-	cloneURL string,
-	token string,
+    ctx context.Context,
+    containerID string,
+    cloneURL string,
+    token string,
 ) (string, error) {
 
-	askpass := fmt.Sprintf(`#!/bin/sh
+    askpass := fmt.Sprintf(`#!/bin/sh
 
-	case "$1" in
-		Username*)
-			echo "x-access-token"
-			;;
-		Password*)
-			echo '%s'
-			;;
-	esac
-	`, token)
+    case "$1" in
+        Username*)
+            echo "x-access-token"
+            ;;
+        Password*)
+            echo '%s'
+            ;;
+    esac
+    `, token)
 
-	_, err := r.Exec(
-		ctx,
-		containerID,
-		"sh",
-		"-c",
-		fmt.Sprintf(
-			"printf '%%s' '%s' > /tmp/git-askpass && chmod 700 /tmp/git-askpass",
-			askpass,
-		),
-	)
+    // Create the git-askpass script inside the container
+    _, err := r.Exec(
+        ctx,
+        containerID,
+        fmt.Sprintf(
+            "printf '%%s' '%s' > /tmp/git-askpass && chmod 700 /tmp/git-askpass",
+            askpass,
+        ),
+    )
 
-	if err != nil {
-		return "", fmt.Errorf(
-			"failed to create git auth helper: %w",
-			err,
-		)
-	}
+    if err != nil {
+        return "", fmt.Errorf(
+            "failed to create git auth helper: %w",
+            err,
+        )
+    }
 
-	output, err := r.Exec(
-		ctx,
-		containerID,
-		"sh",
-		"-c",
-		fmt.Sprintf(
-			"GIT_ASKPASS=/tmp/git-askpass "+
-				"GIT_TERMINAL_PROMPT=0 "+
-				"git clone '%s' /workspace/repo",
-			cloneURL,
-		),
-	)
+    // Clone the repository using the git-askpass script
+    output, err := r.Exec(
+        ctx,
+        containerID,
+        fmt.Sprintf(
+            "GIT_ASKPASS=/tmp/git-askpass "+
+                "GIT_TERMINAL_PROMPT=0 "+
+                "git clone '%s' /workspace/repo",
+            cloneURL,
+        ),
+    )
 
-	if err != nil {
-		return output, fmt.Errorf(
-			"failed to clone repository: %w",
-			err,
-		)
-	}
+    if err != nil {
+        return output, fmt.Errorf(
+            "failed to clone repository: %w",
+            err,
+        )
+    }
 
-	_, _ = r.Exec(
-		ctx,
-		containerID,
-		"rm",
-		"-f",
-		"/tmp/git-askpass",
-	)
+    // Remove the git-askpass script after cloning
+    _, _ = r.Exec(
+        ctx,
+        containerID,
+        "rm -f /tmp/git-askpass",
+    )
 
-	return output, nil
+    return output, nil
 }

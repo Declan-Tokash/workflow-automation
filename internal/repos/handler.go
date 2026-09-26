@@ -37,8 +37,6 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		userSession.AccessToken,
 	)
 
-	fmt.Printf("Fetching repositories for user: %s\n", userSession.AccessToken)
-
 	repos, err := githubClient.GetRepositories(r.Context())
 	if err != nil {
 		http.Error(

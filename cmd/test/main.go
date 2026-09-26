@@ -50,7 +50,7 @@ func main() {
 	output, err := r.Exec(
 		ctx,
 		containerID,
-		"pwd",
+		"echo hello && python --version && cd repo && ls",
 	)
 	
 	if err != nil {
@@ -59,36 +59,4 @@ func main() {
 	
 	fmt.Println(output)
 
-	output, err = r.Exec(
-		ctx,
-		containerID,
-		"sh",
-		"-c",
-		"cd repo && ls",
-	)
-	
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	fmt.Println(output)
-
-	// output, err := r.Exec(
-	// 	ctx,
-	// 	containerID,
-	// 	"python",
-	// 	"--version",
-	// )
-	// output, err := r.Exec(
-	// 	ctx,
-	// 	containerID,
-	// 	"git",
-	// 	"--version",
-	// )
-
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// fmt.Println("Output:", output)
 }

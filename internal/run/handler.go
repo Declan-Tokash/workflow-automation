@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Declan-Tokash/workflow-automation/internal/clone"
 	"github.com/Declan-Tokash/workflow-automation/internal/github"
 	"github.com/Declan-Tokash/workflow-automation/internal/runner"
 	"github.com/Declan-Tokash/workflow-automation/internal/session"
@@ -13,19 +12,16 @@ import (
 
 type Handler struct {
 	Sessions *session.Store
-	Clone    *clone.Service
-	Runner   *runner.DockerRunner
+	Runner   *runner.ContainerRunner
 }
 
 func NewHandler(
 	sessions *session.Store,
-	cloneService *clone.Service,
-	dockerRunner *runner.DockerRunner,
+	containerRunner *runner.ContainerRunner,
 ) *Handler {
 	return &Handler{
 		Sessions: sessions,
-		Clone:    cloneService,
-		Runner:   dockerRunner,
+		Runner:   containerRunner,
 	}
 }
 
@@ -39,6 +35,12 @@ type RunResponse struct {
 	Repository string `json:"repository"`
 	Runtime    string `json:"runtime"`
 	Output     string `json:"output"`
+}
+
+var runtimeImage = map[string]string{
+    "python": "workflow-python:latest",
+    "node":   "workflow-node:latest",
+    "go":     "workflow-go:latest",
 }
 
 func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
@@ -127,14 +129,50 @@ func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Clone repository
-	repoPath, err := h.Clone.Clone(
+	// 6. Select Docker image
+	image, ok := runtimeImage[req.Runtime]
+	if !ok {
+		http.Error(
+			w,
+			"unsupported runtime: "+req.Runtime,
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	// 7. Create container
+	containerID, err := h.Runner.Create(
 		r.Context(),
+		image,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"failed to create container",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	defer h.Runner.Remove(r.Context(), containerID)
+
+	// 8. Start container
+	if err := h.Runner.Start(r.Context(), containerID); err != nil {
+		http.Error(
+			w,
+			"failed to start container",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	// 9. Clone repository into container
+	if _, err := h.Runner.Clone(
+		r.Context(),
+		containerID,
 		cloneURL,
 		userSession.AccessToken,
-	)
-
-	if err != nil {
+	); err != nil {
 		http.Error(
 			w,
 			"failed to clone repository",
@@ -142,23 +180,11 @@ func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-
-	// 7. Select Docker image
-	image, err := runtimeImage(req.Runtime)
-	if err != nil {
-		http.Error(
-			w,
-			err.Error(),
-			http.StatusBadRequest,
-		)
-		return
-	}
-
-	// 8. Run command
-	output, err := h.Runner.Run(
+	
+	// 10. Execute the user's command inside /workspace/repo
+	output, err := h.Runner.Exec(
 		r.Context(),
-		repoPath,
-		image,
+		containerID,
 		req.Command,
 	)
 
@@ -171,7 +197,7 @@ func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 9. Return result
+	// 11. Return command output
 	response := RunResponse{
 		Repository: req.Repository,
 		Runtime:    req.Runtime,
@@ -180,5 +206,12 @@ func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(
+			w,
+			"failed to encode response",
+			http.StatusInternalServerError,
+		)
+		return
+	}
 }
